@@ -3,3 +3,11 @@
 
 # Ada Library Information
 *.ali
+
+# Node / Next.js
+node_modules
+.next
+.env
+.env.local
+.DS_Store
+
