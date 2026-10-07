@@ -1,0 +1,19 @@
+# Bakul Endog Design Rules
+
+## Visual system
+- Primary color: #1f4e79.
+- Accent and warning color: #eab308.
+- Page background: #f4f4f5.
+- Card background: #ffffff.
+- Use sans-serif typography.
+- Stock quantities and currency values must be bold and at least 16px.
+
+## Components
+- Use a bottom navigation with no more than 5 items.
+- Use cards with rounded-xl corners and shadow-sm.
+- All interactive buttons must have a minimum height of 48px for comfortable touch use.
+
+## UX requirements
+- Show loading states and handle errors for every Supabase fetch.
+- Keep forms low-friction with as few taps as possible.
+- Display the relevant unit beside every numeric value: butir, kg, or Rp.
