@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getSupabaseStatusMessage, supabase } from '../lib/supabase'
 
 export default function Home() {
@@ -8,12 +8,45 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [saving, setSaving] = useState(false)
+  const [purchaseStatus, setPurchaseStatus] = useState('')
   const [form, setForm] = useState({
     kode: '',
     nama: '',
     kategori: 'Mentah',
     biji_per_kg: 14,
   })
+  const [purchase, setPurchase] = useState({
+    produkId: '',
+    jumlah_kg: 20,
+    harga_per_kg: 0,
+    catatan: '',
+  })
+
+  const summary = useMemo(() => {
+    const totalProduk = produk.length
+    const kategoriSet = new Set(produk.map((item) => item.kategori || 'Lainnya'))
+    const rataBiji = totalProduk
+      ? Math.round(
+          produk.reduce((total, item) => total + Number(item.biji_per_kg || 0), 0) / totalProduk
+        )
+      : 0
+
+    return {
+      totalProduk,
+      totalKategori: kategoriSet.size,
+      rataBiji,
+    }
+  }, [produk])
+
+  const selectedProduk = useMemo(() => {
+    if (!purchase.produkId) return null
+    return produk.find((item) => String(item.id) === String(purchase.produkId)) || null
+  }, [produk, purchase.produkId])
+
+  const purchaseTotal = Number(purchase.jumlah_kg || 0) * Number(purchase.harga_per_kg || 0)
+  const estimatedBiji = selectedProduk
+    ? Number(selectedProduk.biji_per_kg || 0) * Number(purchase.jumlah_kg || 0)
+    : 0
 
   const fetchProduk = async () => {
     try {
@@ -27,6 +60,10 @@ export default function Home() {
 
       setProduk(data || [])
       setErrorMessage('')
+
+      if (data && data.length > 0 && !purchase.produkId) {
+        setPurchase((prev) => ({ ...prev, produkId: String(data[0].id) }))
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown Supabase fetch error'
       setErrorMessage(message)
@@ -45,6 +82,14 @@ export default function Home() {
     setForm((prev) => ({
       ...prev,
       [name]: name === 'biji_per_kg' ? Number(value) : value,
+    }))
+  }
+
+  const handlePurchaseChange = (event) => {
+    const { name, value } = event.target
+    setPurchase((prev) => ({
+      ...prev,
+      [name]: name === 'jumlah_kg' || name === 'harga_per_kg' ? Number(value) : value,
     }))
   }
 
@@ -89,16 +134,37 @@ export default function Home() {
     }
   }
 
+  const handlePurchaseSubmit = (event) => {
+    event.preventDefault()
+
+    if (!selectedProduk) {
+      setPurchaseStatus('Pilih produk untuk menghitung pembelian.')
+      return
+    }
+
+    setPurchaseStatus(
+      `Draft pembelian ${selectedProduk.nama} berhasil dihitung: ${purchase.jumlah_kg} kg x Rp ${Number(
+        purchase.harga_per_kg
+      ).toLocaleString('id-ID')} = Rp ${purchaseTotal.toLocaleString('id-ID')}. Estimasi ${estimatedBiji} butir.`
+    )
+  }
+
   return (
-    <main style={{ maxWidth: '900px', margin: '32px auto', backgroundColor: '#f5f7fb', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
+    <main style={{ maxWidth: '1100px', margin: '32px auto', backgroundColor: '#f5f7fb', padding: '24px', borderRadius: '16px', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
       <h1 style={{ color: '#1f4e79', marginTop: 0, marginBottom: '12px', fontSize: '2.2rem' }}>🥚 Bakul Endog Dashboard</h1>
-      <p style={{ marginTop: 0, marginBottom: '20px', color: '#334155', fontSize: '1rem' }}>Selamat datang di aplikasi manajemen stok dan keuangan telur.</p>
+      <p style={{ marginTop: 0, marginBottom: '20px', color: '#334155', fontSize: '1rem' }}>Selamat datang di aplikasi manajemen stok dan pembelian telur.</p>
 
       <div style={{ marginBottom: '20px', padding: '12px 14px', backgroundColor: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: '10px', color: '#0f172a', fontSize: '13px' }}>
         <strong>Supabase status:</strong> {getSupabaseStatusMessage()}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '22px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '16px', marginBottom: '22px' }}>
+        <StatCard label="Total Produk" value={summary.totalProduk} accent="#1d4ed8" />
+        <StatCard label="Kategori" value={summary.totalKategori} accent="#0f766e" />
+        <StatCard label="Rata-rata Biji/kg" value={`${summary.rataBiji}`} accent="#f59e0b" />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 0.85fr', gap: '22px', alignItems: 'start' }}>
         <section style={{ backgroundColor: 'white', borderRadius: '12px', padding: '18px', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)' }}>
           <h3 style={{ borderBottom: '2px solid #eee', paddingBottom: '8px', marginTop: 0 }}>Daftar Produk di Database</h3>
 
@@ -169,7 +235,64 @@ export default function Home() {
           </form>
         </section>
       </div>
+
+      <section style={{ marginTop: '22px', backgroundColor: 'white', borderRadius: '12px', padding: '18px', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '16px' }}>Pembelian Harian</h3>
+
+        <form onSubmit={handlePurchaseSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '14px' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#334155' }}>Produk</label>
+            <select name="produkId" value={purchase.produkId} onChange={handlePurchaseChange} style={inputStyle}>
+              {produk.map((item) => (
+                <option key={item.id} value={item.id}>{item.nama}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#334155' }}>Jumlah (kg)</label>
+            <input name="jumlah_kg" type="number" min="1" value={purchase.jumlah_kg} onChange={handlePurchaseChange} style={inputStyle} />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#334155' }}>Harga per kg</label>
+            <input name="harga_per_kg" type="number" min="0" value={purchase.harga_per_kg} onChange={handlePurchaseChange} style={inputStyle} />
+          </div>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#334155' }}>Catatan</label>
+            <textarea name="catatan" value={purchase.catatan} onChange={handlePurchaseChange} rows="3" style={{ ...inputStyle, resize: 'vertical' }} placeholder="Catatan pembelian atau keterangan supplier" />
+          </div>
+
+          <div style={{ gridColumn: '1 / -1', backgroundColor: '#f8fafc', borderRadius: '10px', padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+            <div style={{ fontSize: '14px', color: '#475569', marginBottom: '6px' }}>Estimasi total</div>
+            <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#1f4e79' }}>Rp {purchaseTotal.toLocaleString('id-ID')}</div>
+            <div style={{ marginTop: '4px', color: '#0f172a', fontSize: '13px' }}>
+              {selectedProduk ? `${selectedProduk.nama} • ${estimatedBiji} butir estimasi` : 'Pilih produk untuk melihat estimasi'}
+            </div>
+          </div>
+
+          <button type="submit" style={{ gridColumn: '1 / -1', backgroundColor: '#f59e0b', color: '#111827', border: 'none', borderRadius: '10px', padding: '12px 16px', fontWeight: 700, cursor: 'pointer' }}>
+            Hitung Pembelian
+          </button>
+        </form>
+
+        {purchaseStatus ? (
+          <div style={{ marginTop: '14px', backgroundColor: '#f0fdf4', color: '#166534', borderRadius: '8px', padding: '10px 12px', border: '1px solid #bbf7d0' }}>
+            {purchaseStatus}
+          </div>
+        ) : null}
+      </section>
     </main>
+  )
+}
+
+function StatCard({ label, value, accent }) {
+  return (
+    <div style={{ backgroundColor: '#fff', borderRadius: '12px', boxShadow: '0 3px 10px rgba(15, 23, 42, 0.04)', padding: '18px', borderTop: `4px solid ${accent}` }}>
+      <div style={{ color: '#64748b', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</div>
+      <div style={{ marginTop: '8px', fontSize: '2rem', fontWeight: 800, color: '#0f172a' }}>{value}</div>
+    </div>
   )
 }
 
